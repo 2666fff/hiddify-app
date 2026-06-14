@@ -4,6 +4,6 @@ abstract class ManagedClientConfig {
   static const enabled = true;
   static const apiBaseUrl = String.fromEnvironment(
     'HUIJIA_API_BASE_URL',
-    defaultValue: 'http://51.79.250.45:8787',
+    defaultValue: 'https://api.huijia.xyz',
   );
 }
