@@ -8,6 +8,9 @@ import 'package:hiddify/core/router/bottom_sheets/bottom_sheets_notifier.dart';
 import 'package:hiddify/core/router/go_router/helper/active_breakpoint_notifier.dart';
 import 'package:hiddify/core/router/go_router/helper/custom_transition.dart';
 import 'package:hiddify/core/router/go_router/refresh_listenable.dart';
+import 'package:hiddify/features/account/model/managed_client_config.dart';
+import 'package:hiddify/features/account/notifier/account_controller.dart';
+import 'package:hiddify/features/account/widget/auth_page.dart';
 import 'package:hiddify/features/about/widget/about_page.dart';
 import 'package:hiddify/features/home/widget/home_page.dart';
 import 'package:hiddify/features/intro/widget/intro_page.dart';
@@ -68,6 +71,18 @@ class RoutingConfigNotifier extends _$RoutingConfigNotifier {
     if (isMobileBreakpoint == null) return loadingConfig;
     return RoutingConfig(
       redirect: (context, state) {
+        final isAuthenticated = ref.read(accountControllerProvider).isAuthenticated;
+        final isAuthRoute = state.matchedLocation == '/auth';
+        if (ManagedClientConfig.enabled && !isAuthenticated && !isAuthRoute) {
+          return '/auth';
+        }
+        if (ManagedClientConfig.enabled && isAuthenticated && isAuthRoute) {
+          return '/home';
+        }
+        if (ManagedClientConfig.enabled && state.matchedLocation == '/intro') {
+          return isAuthenticated ? '/home' : '/auth';
+        }
+
         // fix path-parameters for deep link
         String? url;
         if (LinkParser.protocols.contains(state.uri.scheme)) {
@@ -79,7 +94,11 @@ class RoutingConfigNotifier extends _$RoutingConfigNotifier {
           url = state.uri.queryParameters['url'];
         }
 
-        if (!ref.read(Preferences.introCompleted)) {
+        if (ManagedClientConfig.enabled) {
+          url = null;
+        }
+
+        if (!ManagedClientConfig.enabled && !ref.read(Preferences.introCompleted)) {
           // Intro completed
           return url != null ? '/intro?url=$url' : '/intro';
         } else if (state.matchedLocation == '/intro') {
@@ -95,6 +114,8 @@ class RoutingConfigNotifier extends _$RoutingConfigNotifier {
           WidgetsBinding.instance.addPostFrameCallback(
             (_) => ref.read(bottomSheetsNotifierProvider.notifier).showAddProfile(url: url),
           );
+          return '/home';
+        } else if (ManagedClientConfig.enabled && state.matchedLocation.contains('profile-details')) {
           return '/home';
         } else if (state.matchedLocation.contains('chain-options') &&
             (ref.watch(hasAnyProfileProvider).value == false)) {
@@ -296,6 +317,7 @@ class RoutingConfigNotifier extends _$RoutingConfigNotifier {
             ],
           ],
         ),
+        GoRoute(name: 'auth', path: '/auth', builder: (_, _) => const AuthPage()),
         GoRoute(name: 'intro', path: '/intro', builder: (_, _) => const IntroPage()),
       ],
     );

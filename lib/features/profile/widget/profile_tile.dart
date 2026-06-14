@@ -13,6 +13,7 @@ import 'package:hiddify/core/router/dialog/dialog_notifier.dart';
 import 'package:hiddify/core/router/go_router/helper/active_breakpoint_notifier.dart';
 import 'package:hiddify/core/widget/adaptive_icon.dart';
 import 'package:hiddify/core/widget/adaptive_menu.dart';
+import 'package:hiddify/features/account/model/managed_client_config.dart';
 import 'package:hiddify/features/profile/model/profile_entity.dart';
 import 'package:hiddify/features/profile/notifier/profile_notifier.dart';
 import 'package:hiddify/features/profile/overview/profiles_notifier.dart';
@@ -51,7 +52,7 @@ class ProfileTile extends HookConsumerWidget {
       _ => null,
     };
 
-    final showActionButton = profile is RemoteProfileEntity || !isMain;
+    final showActionButton = !ManagedClientConfig.enabled && (profile is RemoteProfileEntity || !isMain);
 
     // final effectiveMargin = isMain ? const EdgeInsets.symmetric(horizontal: 16, vertical: 8) : const EdgeInsets.only(left: 12, right: 12, bottom: 12);
     // final double effectiveElevation = profile.active ? 12 : 4;
@@ -249,64 +250,66 @@ class ProfileActionsMenu extends HookConsumerWidget {
             ref.read(updateProfileNotifierProvider(profile.id).notifier).updateProfile(profile as RemoteProfileEntity);
           },
         ),
-      AdaptiveMenuItem(
-        title: t.common.share,
-        leadingIcon: Icon(AdaptiveIcon(context).share),
-        subItems: [
-          if (profile case RemoteProfileEntity(:final url, :final name)) ...[
-            AdaptiveMenuItem(
-              title: t.pages.profiles.share.urlToClipboard,
-              onTap: () async {
-                final link = LinkParser.generateSubShareLink(url, name);
-                if (link.isNotEmpty) {
-                  await Clipboard.setData(ClipboardData(text: link));
-                  if (context.mounted) {
-                    ref
-                        .read(inAppNotificationControllerProvider)
-                        .showSuccessToast(t.common.msg.export.clipboard.success);
+      if (!ManagedClientConfig.enabled) ...[
+        AdaptiveMenuItem(
+          title: t.common.share,
+          leadingIcon: Icon(AdaptiveIcon(context).share),
+          subItems: [
+            if (profile case RemoteProfileEntity(:final url, :final name)) ...[
+              AdaptiveMenuItem(
+                title: t.pages.profiles.share.urlToClipboard,
+                onTap: () async {
+                  final link = LinkParser.generateSubShareLink(url, name);
+                  if (link.isNotEmpty) {
+                    await Clipboard.setData(ClipboardData(text: link));
+                    if (context.mounted) {
+                      ref
+                          .read(inAppNotificationControllerProvider)
+                          .showSuccessToast(t.common.msg.export.clipboard.success);
+                    }
                   }
-                }
-              },
-            ),
+                },
+              ),
+              AdaptiveMenuItem(
+                title: t.pages.profiles.share.showUrlQr,
+                onTap: () async {
+                  final link = LinkParser.generateSubShareLink(url, name);
+                  if (link.isNotEmpty) {
+                    await ref.read(dialogNotifierProvider.notifier).showQrCode(link, message: name);
+                  }
+                },
+              ),
+            ],
             AdaptiveMenuItem(
-              title: t.pages.profiles.share.showUrlQr,
-              onTap: () async {
-                final link = LinkParser.generateSubShareLink(url, name);
-                if (link.isNotEmpty) {
-                  await ref.read(dialogNotifierProvider.notifier).showQrCode(link, message: name);
-                }
-              },
+              title: t.pages.profiles.share.jsonToClipboard,
+              onTap: () async => await ref.read(profilesNotifierProvider.notifier).exportConfigToClipboard(profile),
             ),
           ],
-          AdaptiveMenuItem(
-            title: t.pages.profiles.share.jsonToClipboard,
-            onTap: () async => await ref.read(profilesNotifierProvider.notifier).exportConfigToClipboard(profile),
-          ),
-        ],
-      ),
-      AdaptiveMenuItem(
-        leadingIcon: const Icon(Icons.edit_rounded),
-        title: t.common.edit,
-        onTap: () {
-          if (Breakpoint(context).isMobile()) context.pop();
-          context.goNamed('profileDetails', pathParameters: {'id': profile.id});
-        },
-      ),
-      // if (!profile.active)
-      AdaptiveMenuItem(
-        leadingIcon: const Icon(Icons.delete_outline_rounded),
-        title: t.common.delete,
-        onTap: () async => await ref
-            .read(dialogNotifierProvider.notifier)
-            .showConfirmation(
-              title: t.dialogs.confirmation.profile.delete.title,
-              message: t.dialogs.confirmation.profile.delete.msg,
-            )
-            .then((deleteConfirmed) async {
-              if (!deleteConfirmed) return;
-              await ref.read(profilesNotifierProvider.notifier).deleteProfile(profile);
-            }),
-      ),
+        ),
+        AdaptiveMenuItem(
+          leadingIcon: const Icon(Icons.edit_rounded),
+          title: t.common.edit,
+          onTap: () {
+            if (Breakpoint(context).isMobile()) context.pop();
+            context.goNamed('profileDetails', pathParameters: {'id': profile.id});
+          },
+        ),
+        // if (!profile.active)
+        AdaptiveMenuItem(
+          leadingIcon: const Icon(Icons.delete_outline_rounded),
+          title: t.common.delete,
+          onTap: () async => await ref
+              .read(dialogNotifierProvider.notifier)
+              .showConfirmation(
+                title: t.dialogs.confirmation.profile.delete.title,
+                message: t.dialogs.confirmation.profile.delete.msg,
+              )
+              .then((deleteConfirmed) async {
+                if (!deleteConfirmed) return;
+                await ref.read(profilesNotifierProvider.notifier).deleteProfile(profile);
+              }),
+        ),
+      ],
     ];
 
     return AdaptiveMenu(builder: builder, items: menuItems, child: child);

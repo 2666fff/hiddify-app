@@ -4,6 +4,9 @@ import 'package:gap/gap.dart';
 import 'package:hiddify/core/app_info/app_info_provider.dart';
 import 'package:hiddify/core/localization/translations.dart';
 import 'package:hiddify/core/router/bottom_sheets/bottom_sheets_notifier.dart';
+import 'package:hiddify/core/router/dialog/dialog_notifier.dart';
+import 'package:hiddify/features/account/model/managed_client_config.dart';
+import 'package:hiddify/features/account/notifier/account_controller.dart';
 import 'package:hiddify/features/home/widget/connection_button.dart';
 import 'package:hiddify/features/profile/notifier/active_profile_notifier.dart';
 import 'package:hiddify/features/profile/widget/profile_tile.dart';
@@ -60,14 +63,35 @@ class HomePage extends HookConsumerWidget {
           //     material: (context, platform) => MaterialIconButtonData(
           //           tooltip: t.profile.add.buttonText,
           //         )),
-          Semantics(
-            key: const ValueKey("profile_add_button"),
-            label: t.pages.profiles.add,
-            child: IconButton(
-              icon: Icon(Icons.add_rounded, color: theme.colorScheme.primary),
-              onPressed: () => ref.read(bottomSheetsNotifierProvider.notifier).showAddProfile(),
+          if (ManagedClientConfig.enabled) ...[
+            IconButton(
+              icon: Icon(Icons.sync_rounded, color: theme.colorScheme.primary),
+              tooltip: '同步线路',
+              onPressed: () async {
+                try {
+                  await ref.read(accountControllerProvider).syncProfiles();
+                } catch (error) {
+                  ref
+                      .read(dialogNotifierProvider.notifier)
+                      .showCustomAlert(title: '同步线路失败', message: error.toString());
+                }
+              },
             ),
-          ),
+            IconButton(
+              icon: Icon(Icons.logout_rounded, color: theme.colorScheme.primary),
+              tooltip: '退出登录',
+              onPressed: () => ref.read(accountControllerProvider).logout(),
+            ),
+          ] else ...[
+            Semantics(
+              key: const ValueKey("profile_add_button"),
+              label: t.pages.profiles.add,
+              child: IconButton(
+                icon: Icon(Icons.add_rounded, color: theme.colorScheme.primary),
+                onPressed: () => ref.read(bottomSheetsNotifierProvider.notifier).showAddProfile(),
+              ),
+            ),
+          ],
           const Gap(8),
         ],
       ),

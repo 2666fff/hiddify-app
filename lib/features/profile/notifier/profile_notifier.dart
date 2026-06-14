@@ -9,6 +9,7 @@ import 'package:hiddify/core/localization/translations.dart';
 import 'package:hiddify/core/model/failures.dart';
 import 'package:hiddify/core/notification/in_app_notification_controller.dart';
 import 'package:hiddify/core/router/dialog/dialog_notifier.dart';
+import 'package:hiddify/features/account/model/managed_client_config.dart';
 import 'package:hiddify/features/connection/notifier/connection_notifier.dart';
 import 'package:hiddify/features/profile/add/model/free_profiles_model.dart';
 import 'package:hiddify/features/profile/data/profile_data_providers.dart';
@@ -61,6 +62,10 @@ class AddProfileNotifier extends _$AddProfileNotifier with AppLogger {
   CancelToken? _cancelToken;
 
   Future<void> addClipboard(String rawInput) async {
+    if (ManagedClientConfig.enabled) {
+      state = AsyncError(const ProfileCancelByUserFailure('Profiles are managed by the server'), StackTrace.current);
+      return;
+    }
     if (state.isLoading) return;
     state = const AsyncLoading();
     state = await AsyncValue.guard(() async {
@@ -94,6 +99,10 @@ class AddProfileNotifier extends _$AddProfileNotifier with AppLogger {
   }
 
   Future<void> addManual({required String url, required UserOverride userOverride}) async {
+    if (ManagedClientConfig.enabled) {
+      state = AsyncError(const ProfileCancelByUserFailure('Profiles are managed by the server'), StackTrace.current);
+      return;
+    }
     if (state.isLoading) return;
     state = const AsyncLoading();
     state = await AsyncValue.guard(() async {

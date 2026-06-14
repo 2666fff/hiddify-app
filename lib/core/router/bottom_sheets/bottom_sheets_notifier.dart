@@ -3,6 +3,7 @@ import 'package:hiddify/core/model/constants.dart';
 import 'package:hiddify/core/router/bottom_sheets/widgets/auto_apps_selection_modal.dart';
 import 'package:hiddify/core/router/bottom_sheets/widgets/quick_settings_modal.dart';
 import 'package:hiddify/core/router/go_router/go_router_notifier.dart';
+import 'package:hiddify/features/account/model/managed_client_config.dart';
 import 'package:hiddify/features/per_app_proxy/model/per_app_proxy_mode.dart';
 import 'package:hiddify/features/profile/add/add_profile_modal.dart';
 import 'package:hiddify/features/profile/overview/profiles_modal.dart';
@@ -43,8 +44,10 @@ class BottomSheetsNotifier extends _$BottomSheetsNotifier {
         });
   }
 
-  Future<void> showAddProfile({String? url}) async =>
-      await _show(isScrollControlled: true, child: AddProfileModal(url: url));
+  Future<void> showAddProfile({String? url}) async {
+    if (ManagedClientConfig.enabled) return;
+    await _show(isScrollControlled: true, child: AddProfileModal(url: url));
+  }
 
   Future<void> showProfilesOverview() async => await _show(isScrollControlled: true, child: const ProfilesModal());
 
