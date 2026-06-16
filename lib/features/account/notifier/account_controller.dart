@@ -18,13 +18,10 @@ final accountControllerProvider = ChangeNotifierProvider<AccountController>((ref
 });
 
 class AccountController extends ChangeNotifier {
-  AccountController({
-    required AccountApi api,
-    required SharedPreferences preferences,
-    required Ref ref,
-  }) : _api = api,
-       _preferences = preferences,
-       _ref = ref {
+  AccountController({required AccountApi api, required SharedPreferences preferences, required Ref ref})
+    : _api = api,
+      _preferences = preferences,
+      _ref = ref {
     final token = _preferences.getString(_tokenKey) ?? '';
     final username = _preferences.getString(_usernameKey) ?? '';
     if (token.isNotEmpty) {
@@ -52,8 +49,20 @@ class AccountController extends ChangeNotifier {
     await _authenticate(() => _api.login(username: username, password: password));
   }
 
-  Future<void> register(String username, String password) async {
-    await _authenticate(() => _api.register(username: username, password: password));
+  Future<void> register(
+    String username,
+    String password, {
+    required String captchaToken,
+    required String captchaAnswer,
+  }) async {
+    await _authenticate(
+      () => _api.register(
+        username: username,
+        password: password,
+        captchaToken: captchaToken,
+        captchaAnswer: captchaAnswer,
+      ),
+    );
   }
 
   Future<void> logout() async {
@@ -111,6 +120,10 @@ class AccountController extends ChangeNotifier {
       return '无法连接服务端，请确认服务端地址和网络。';
     }
     if (error case DioException(:final response?)) {
+      final data = response.data;
+      if (data is Map && data['error'] != null && data['error'].toString().isNotEmpty) {
+        return data['error'].toString();
+      }
       return switch (response.statusCode) {
         409 => '账号已存在，请直接登录。',
         401 => '账号或密码错误。',

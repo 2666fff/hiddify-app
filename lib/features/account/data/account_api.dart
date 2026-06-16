@@ -21,6 +21,17 @@ class AccountApi {
 
   final Dio _dio;
 
+  Future<CaptchaChallenge> fetchCaptcha() async {
+    final response = await _dio.get<Map<String, dynamic>>('/api/v1/auth/captcha');
+    final data = response.data ?? const {};
+    final token = (data['token'] ?? '').toString();
+    final image = (data['image'] ?? '').toString();
+    if (token.isEmpty || image.isEmpty) {
+      throw StateError('Server did not return a captcha challenge');
+    }
+    return CaptchaChallenge(token: token, imageDataUrl: image);
+  }
+
   Future<AccountSession> login({required String username, required String password}) async {
     await HuijiaDebugLog.info('account login start', {'username': username, 'baseUrl': ManagedClientConfig.apiBaseUrl});
     try {
@@ -41,7 +52,12 @@ class AccountApi {
     }
   }
 
-  Future<AccountSession> register({required String username, required String password}) async {
+  Future<AccountSession> register({
+    required String username,
+    required String password,
+    required String captchaToken,
+    required String captchaAnswer,
+  }) async {
     await HuijiaDebugLog.info('account register start', {
       'username': username,
       'baseUrl': ManagedClientConfig.apiBaseUrl,
@@ -49,7 +65,12 @@ class AccountApi {
     try {
       final response = await _dio.post<Map<String, dynamic>>(
         '/api/v1/auth/register',
-        data: {'username': username, 'password': password},
+        data: {
+          'username': username,
+          'password': password,
+          'captchaToken': captchaToken,
+          'captchaAnswer': captchaAnswer,
+        },
       );
       final session = _sessionFromResponse(response.data, fallbackUsername: username);
       await HuijiaDebugLog.info('account register success', {
@@ -159,4 +180,11 @@ class AccountApi {
     final path = uri.path.replaceFirst(RegExp('^/sub/.+'), '/sub/<redacted>');
     return '${uri.scheme}://${uri.host}$path';
   }
+}
+
+class CaptchaChallenge {
+  const CaptchaChallenge({required this.token, required this.imageDataUrl});
+
+  final String token;
+  final String imageDataUrl;
 }
