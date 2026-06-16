@@ -51,6 +51,7 @@ class ProfileTile extends HookConsumerWidget {
       RemoteProfileEntity(:final subInfo) => subInfo,
       _ => null,
     };
+    final displayName = Constants.normalizeAppDisplayName(profile.name);
 
     final showActionButton = !ManagedClientConfig.enabled && (profile is RemoteProfileEntity || !isMain);
 
@@ -133,13 +134,13 @@ class ProfileTile extends HookConsumerWidget {
                                   children: [
                                     Flexible(
                                       child: Text(
-                                        profile.name,
+                                        displayName,
                                         maxLines: 2,
                                         overflow: TextOverflow.ellipsis,
                                         style: theme.textTheme.titleMedium?.copyWith(
                                           fontFamily: PlatformUtils.isWindows ? FontFamily.emoji : null,
                                         ),
-                                        semanticsLabel: t.pages.profiles.activeProfileName(name: profile.name),
+                                        semanticsLabel: t.pages.profiles.activeProfileName(name: displayName),
                                       ),
                                     ),
                                     const Icon(Icons.arrow_drop_down_rounded),
@@ -149,15 +150,15 @@ class ProfileTile extends HookConsumerWidget {
                             )
                           else
                             Text(
-                              profile.name,
+                              displayName,
                               maxLines: 2,
                               overflow: TextOverflow.ellipsis,
                               style: theme.textTheme.titleMedium?.copyWith(
                                 fontFamily: PlatformUtils.isWindows ? FontFamily.emoji : null,
                               ),
                               semanticsLabel: profile.active
-                                  ? t.pages.profiles.activeProfileName(name: profile.name)
-                                  : t.pages.profiles.nonActiveProfileName(name: profile.name),
+                                  ? t.pages.profiles.activeProfileName(name: displayName)
+                                  : t.pages.profiles.nonActiveProfileName(name: displayName),
                             ),
                           if (subInfo != null) ...[
                             const Gap(4),

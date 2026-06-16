@@ -6,6 +6,7 @@ import 'package:dio/dio.dart';
 import 'package:fpdart/fpdart.dart';
 import 'package:hiddify/core/db/db.dart';
 import 'package:hiddify/core/http_client/dio_http_client.dart';
+import 'package:hiddify/core/logger/huijia_debug_log.dart';
 import 'package:hiddify/features/profile/data/profile_data_mapper.dart';
 import 'package:hiddify/features/profile/model/profile_entity.dart';
 import 'package:hiddify/features/profile/model/profile_failure.dart';
@@ -66,6 +67,7 @@ class ProfileParser {
             cancelToken: CancelToken(),
             ref: _ref,
           );
+          await sortProfileLinesByTcpDelay(tempFilePath: tempFilePath);
         }, (_, _) => const ProfileFailure.unexpected())
         .flatMap((_) => TaskEither.fromEither(populateHeaders(content: content)))
         .flatMap(
@@ -149,6 +151,11 @@ class ProfileParser {
     // if (url.startsWith("http://"))
     //   throw const ProfileFailure.invalidUrl('HTTP is not supported. Please use HTTPS for secure connection.');
 
+    await HuijiaDebugLog.info('profile download start', {
+      'url': url.replaceFirst(RegExp('(/sub/).+'), r'$1<redacted>'),
+      'tempFilePath': tempFilePath,
+    });
+
     final rs = await _httpClient
         .download(
           url.trim(),
@@ -164,12 +171,26 @@ class ProfileParser {
           }
           throw err;
         });
+    final content = await File(tempFilePath).readAsString();
+    final decoded = safeDecodeBase64(content);
+    final decodedLines = decoded.split('\n').where((line) => line.trim().isNotEmpty).toList(growable: false);
+    await HuijiaDebugLog.info('profile download success', {
+      'statusCode': rs.statusCode,
+      'contentLength': content.length,
+      'decodedLineCount': decodedLines.length,
+      'firstLineShape': decodedLines.isEmpty ? '<empty>' : _shapeConfigLine(decodedLines.first),
+      'headers': rs.headers.map.keys.join(','),
+    });
+    if (content.trim().isEmpty || decodedLines.isEmpty) {
+      throw const ProfileFailure.invalidConfig('服务端暂无可用线路，请联系管理员添加节点');
+    }
     await expandRemoteLinesInParallel(
       tempFilePath: tempFilePath,
       httpClient: _httpClient,
       cancelToken: cancelToken ?? CancelToken(),
       ref: _ref,
     );
+    await sortProfileLinesByTcpDelay(tempFilePath: tempFilePath);
     // fixing headers before return
     return rs.headers.map.map((key, value) {
       if (value.length == 1) return MapEntry(key, value.first);
@@ -184,7 +205,7 @@ class ProfileParser {
     int parallelism = 4,
   }) async {
     final content = await File(tempFilePath).readAsString();
-    final lines = content.split('\n');
+    final lines = _profileContentLines(content);
 
     final results = List<String?>.filled(lines.length, null);
 
@@ -197,17 +218,16 @@ class ProfileParser {
         final currentIndex = index++;
         if (currentIndex >= lines.length) return;
 
-        final line = lines[currentIndex];
+        final line = lines[currentIndex].trim();
 
         // Non-URL
         if (!line.startsWith('http://') && !line.startsWith('https://')) {
-          results[currentIndex] = line.trim();
+          results[currentIndex] = line;
           continue;
         }
 
+        final tmpPath = '$tempFilePath.$currentIndex';
         try {
-          final tmpPath = '$tempFilePath.$currentIndex';
-
           await httpClient.download(
             line,
             tmpPath,
@@ -217,12 +237,15 @@ class ProfileParser {
                 : null,
           );
 
-          results[currentIndex] = (await File(tmpPath).readAsString()).trim();
+          results[currentIndex] = safeDecodeBase64(await File(tmpPath).readAsString()).trim();
         } catch (err) {
           if (err is DioException && CancelToken.isCancel(err)) {
             return;
           }
           results[currentIndex] = '';
+        } finally {
+          final tmpFile = File(tmpPath);
+          if (await tmpFile.exists()) await tmpFile.delete();
         }
       }
     }
@@ -233,6 +256,78 @@ class ProfileParser {
     if (results.any((e) => e != null)) {
       final newContent = results.join("\n");
       await File(tempFilePath).writeAsString(newContent);
+    }
+  }
+
+  Future<void> sortProfileLinesByTcpDelay({
+    required String tempFilePath,
+    Duration timeout = const Duration(seconds: 2),
+    int parallelism = 8,
+  }) async {
+    try {
+      final content = await File(tempFilePath).readAsString();
+      final lines = _profileContentLines(content);
+      final headerLines = <String>[];
+      final otherLines = <String>[];
+      final proxyLines = <_ProfileLine>[];
+
+      for (final indexed in lines.indexed) {
+        final line = indexed.$2.trim();
+        if (line.isEmpty) continue;
+        final target = _extractTcpTarget(line);
+        if (target != null) {
+          proxyLines.add(_ProfileLine(index: indexed.$1, line: line, target: target));
+        } else if (proxyLines.isEmpty && _isProfileHeaderLine(line)) {
+          headerLines.add(line);
+        } else {
+          otherLines.add(line);
+        }
+      }
+
+      if (proxyLines.length < 2) {
+        await File(
+          tempFilePath,
+        ).writeAsString([...headerLines, ...proxyLines.map((e) => e.line), ...otherLines].join('\n'));
+        await HuijiaDebugLog.info('profile tcp sort skipped', {
+          'lineCount': lines.length,
+          'proxyCount': proxyLines.length,
+        });
+        return;
+      }
+
+      int cursor = 0;
+      Future<void> worker() async {
+        while (true) {
+          final current = cursor++;
+          if (current >= proxyLines.length) return;
+          final item = proxyLines[current];
+          item.delayMs = await _tcpConnectDelay(item.target, timeout);
+        }
+      }
+
+      final workerCount = parallelism < proxyLines.length ? parallelism : proxyLines.length;
+      await Future.wait(List.generate(workerCount, (_) => worker()));
+
+      proxyLines.sort((a, b) {
+        final ad = a.delayMs;
+        final bd = b.delayMs;
+        if (ad == null && bd == null) return a.index.compareTo(b.index);
+        if (ad == null) return 1;
+        if (bd == null) return -1;
+        final delayCompare = ad.compareTo(bd);
+        return delayCompare == 0 ? a.index.compareTo(b.index) : delayCompare;
+      });
+
+      final sortedLines = [...headerLines, ...proxyLines.map((e) => e.line), ...otherLines];
+      await File(tempFilePath).writeAsString(sortedLines.join('\n'));
+      await HuijiaDebugLog.info('profile tcp sort done', {
+        'proxyCount': proxyLines.length,
+        'testedCount': proxyLines.where((e) => e.delayMs != null).length,
+        'timeoutCount': proxyLines.where((e) => e.delayMs == null).length,
+        'fastestMs': proxyLines.first.delayMs?.toString() ?? '<timeout>',
+      });
+    } catch (error, stackTrace) {
+      await HuijiaDebugLog.error('profile tcp sort failed', error, stackTrace, {'tempFilePath': tempFilePath});
     }
   }
 
@@ -463,4 +558,115 @@ class ProfileParser {
     });
     return main;
   }
+
+  static String _shapeConfigLine(String line) {
+    final uri = Uri.tryParse(line.trim());
+    if (uri == null) return line.length > 120 ? '${line.substring(0, 120)}...' : line;
+    return '${uri.scheme}://<redacted>${uri.hasFragment ? '#<fragment>' : ''}';
+  }
+}
+
+List<String> _profileContentLines(String content) {
+  return safeDecodeBase64(content).split(RegExp(r'\r?\n')).where((line) => line.trim().isNotEmpty).toList();
+}
+
+bool _isProfileHeaderLine(String line) {
+  return line.startsWith('#') || line.startsWith('//');
+}
+
+Future<int?> _tcpConnectDelay(_TcpTarget target, Duration timeout) async {
+  Socket? socket;
+  final stopwatch = Stopwatch()..start();
+  try {
+    socket = await Socket.connect(target.host, target.port, timeout: timeout);
+    stopwatch.stop();
+    return stopwatch.elapsedMilliseconds == 0 ? 1 : stopwatch.elapsedMilliseconds;
+  } catch (_) {
+    return null;
+  } finally {
+    socket?.destroy();
+  }
+}
+
+_TcpTarget? _extractTcpTarget(String line) {
+  final trimmed = line.trim();
+  final uri = Uri.tryParse(trimmed);
+  if (uri == null || !uri.hasScheme) return null;
+
+  final directTarget = _tcpTargetFromUri(uri);
+  if (directTarget != null) return directTarget;
+
+  return switch (uri.scheme.toLowerCase()) {
+    'ss' || 'ssconf' => _extractShadowsocksTcpTarget(trimmed),
+    'vmess' => _extractVmessTcpTarget(trimmed),
+    _ => null,
+  };
+}
+
+_TcpTarget? _tcpTargetFromUri(Uri uri) {
+  if (!uri.hasAuthority || uri.host.isEmpty || !uri.hasPort || uri.port <= 0) return null;
+  return _TcpTarget(host: uri.host, port: uri.port);
+}
+
+_TcpTarget? _extractShadowsocksTcpTarget(String line) {
+  final body = _uriBody(line);
+  if (body == null || body.isEmpty) return null;
+  final decoded = _decodeBase64Value(body) ?? body;
+  final uri = Uri.tryParse(decoded.contains('://') ? decoded : 'ss://$decoded');
+  return uri == null ? null : _tcpTargetFromUri(uri);
+}
+
+_TcpTarget? _extractVmessTcpTarget(String line) {
+  try {
+    final body = _uriBody(line);
+    if (body == null || body.isEmpty) return null;
+    final decoded = _decodeBase64Value(body);
+    if (decoded == null) return null;
+    final json = jsonDecode(decoded);
+    if (json is! Map) return null;
+    final host = (json['add'] ?? json['address'] ?? json['host'] ?? '').toString();
+    final port = int.tryParse((json['port'] ?? '').toString()) ?? 0;
+    if (host.isEmpty || port <= 0) return null;
+    return _TcpTarget(host: host, port: port);
+  } catch (_) {
+    return null;
+  }
+}
+
+String? _uriBody(String line) {
+  final separator = line.indexOf('://');
+  if (separator < 0) return null;
+  final bodyStart = separator + 3;
+  final queryStart = line.indexOf(RegExp('[?#]'), bodyStart);
+  if (queryStart < 0) return line.substring(bodyStart).trim();
+  return line.substring(bodyStart, queryStart).trim();
+}
+
+String? _decodeBase64Value(String value) {
+  try {
+    var normalized = value.trim().replaceAll('-', '+').replaceAll('_', '/');
+    final padding = normalized.length % 4;
+    if (padding > 0) {
+      normalized = normalized.padRight(normalized.length + (4 - padding), '=');
+    }
+    return utf8.decode(base64Decode(normalized));
+  } catch (_) {
+    return null;
+  }
+}
+
+class _TcpTarget {
+  const _TcpTarget({required this.host, required this.port});
+
+  final String host;
+  final int port;
+}
+
+class _ProfileLine {
+  _ProfileLine({required this.index, required this.line, required this.target});
+
+  final int index;
+  final String line;
+  final _TcpTarget target;
+  int? delayMs;
 }

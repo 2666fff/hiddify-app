@@ -18,7 +18,10 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 // TODO: rewrite
 class ConnectionButton extends HookConsumerWidget {
-  const ConnectionButton({super.key});
+  const ConnectionButton({super.key, this.selectedRouteTag, this.onConnected});
+
+  final String? selectedRouteTag;
+  final Future<void> Function()? onConnected;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -125,14 +128,15 @@ class ConnectionButton extends HookConsumerWidget {
             if (!ManagedClientConfig.enabled) {
               ref.read(bottomSheetsNotifierProvider.notifier).showAddProfile();
             }
+            return;
           }
-          if (await ref.read(dialogNotifierProvider.notifier).showExperimentalFeatureNotice()) {
-            return await ref.read(connectionNotifierProvider.notifier).toggleConnection();
+          await ref.read(connectionNotifierProvider.notifier).toggleConnection();
+          if (selectedRouteTag != null) {
+            await onConnected?.call();
           }
         },
         AsyncData(value: Connected()) => () async {
-          if (requiresReconnect == true &&
-              await ref.read(dialogNotifierProvider.notifier).showExperimentalFeatureNotice()) {
+          if (requiresReconnect == true) {
             return await ref
                 .read(connectionNotifierProvider.notifier)
                 .reconnect(await ref.read(activeProfileProvider.future));

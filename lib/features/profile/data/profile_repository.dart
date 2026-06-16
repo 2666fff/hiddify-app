@@ -3,6 +3,7 @@ import 'package:drift/drift.dart';
 import 'package:flutter/foundation.dart';
 import 'package:fpdart/fpdart.dart';
 import 'package:hiddify/core/db/db.dart';
+import 'package:hiddify/core/logger/huijia_debug_log.dart';
 
 import 'package:hiddify/core/utils/exception_handler.dart';
 import 'package:hiddify/features/profile/data/profile_data_mapper.dart';
@@ -262,12 +263,33 @@ class ProfileRepositoryImpl with ExceptionHandler, InfraLogger implements Profil
       TaskEither.fromEither(_configOptionRepo.fullOptionsOverrided(profileOverride))
           .mapLeft((configOptionFailure) => ProfileFailure.invalidConfig(null, configOptionFailure))
           .flatMap(
-            (overridedOptions) => _singbox
-                .changeOptions(overridedOptions)
-                .mapLeft(ProfileFailure.invalidConfig)
-                .flatMap(
-                  (_) => _singbox.validateConfigByPath(path, tempPath, debug).mapLeft(ProfileFailure.invalidConfig),
-                ),
+            (overridedOptions) => TaskEither.tryCatch(
+              () async {
+                await HuijiaDebugLog.info('profile validate start', {
+                  'targetPath': path,
+                  'tempPath': tempPath,
+                  'profileOverrideLength': profileOverride?.length ?? 0,
+                });
+                final changeOptions = await _singbox.changeOptions(overridedOptions).run();
+                await changeOptions.match((error) async {
+                  await HuijiaDebugLog.info('profile validate change options failed', {'error': error});
+                  throw ProfileFailure.invalidConfig(error);
+                }, (_) async {});
+
+                final validate = await _singbox.validateConfigByPath(path, tempPath, debug).run();
+                await validate.match((error) async {
+                  await HuijiaDebugLog.info('profile validate parse failed', {'error': error});
+                  throw ProfileFailure.invalidConfig(error);
+                }, (_) async {});
+
+                await HuijiaDebugLog.info('profile validate success', {'targetPath': path});
+                return unit;
+              },
+              (error, stackTrace) {
+                if (error is ProfileFailure) return error;
+                return ProfileFailure.unexpected(error, stackTrace);
+              },
+            ),
           );
 
   @override

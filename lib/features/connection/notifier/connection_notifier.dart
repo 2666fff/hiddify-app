@@ -122,6 +122,11 @@ class ConnectionNotifier extends _$ConnectionNotifier with AppLogger {
     }
   }
 
+  Future<void> disconnect() async {
+    await ref.read(Preferences.startedByUser.notifier).update(false);
+    await abortConnection();
+  }
+
   final _singleStart = SingleCall();
 
   Future<void> _connect() async {

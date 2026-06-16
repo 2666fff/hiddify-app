@@ -53,7 +53,7 @@ class AuthPage extends HookConsumerWidget {
                     Icon(Icons.shield_outlined, size: 48, color: theme.colorScheme.primary),
                     const Gap(16),
                     Text(
-                      isRegister.value ? '注册 Huijia VPN' : '登录 Huijia VPN',
+                      isRegister.value ? '注册 回家看看' : '登录 回家看看',
                       textAlign: TextAlign.center,
                       style: theme.textTheme.headlineSmall,
                     ),

@@ -3,8 +3,15 @@ import 'package:flutter/services.dart';
 import 'package:hiddify/utils/utils.dart';
 
 abstract class Constants {
-  static const appName = "Hiddify";
+  static const appName = "回家看看";
+  static const _legacyAppNames = {"hiddify", "huijia vpn", "huijiavpn"};
+
+  static String normalizeAppDisplayName(String name) {
+    return _legacyAppNames.contains(name.trim().toLowerCase()) ? appName : name;
+  }
+
   static const githubUrl = "https://github.com/hiddify/hiddify-next";
+  static const portalUrl = "https://huijia.xyz";
   static const licenseUrl = "https://github.com/hiddify/hiddify-next?tab=License-1-ov-file#readme";
   static const githubReleasesApiUrl = "https://api.github.com/repos/hiddify/hiddify-next/releases";
   static const githubLatestReleaseUrl = "https://github.com/hiddify/hiddify-app/releases/latest";

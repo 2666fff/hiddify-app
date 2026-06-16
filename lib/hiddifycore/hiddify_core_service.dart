@@ -5,6 +5,7 @@ import 'dart:math';
 import 'package:fpdart/fpdart.dart';
 import 'package:grpc/grpc.dart';
 import 'package:hiddify/core/directories/directories_provider.dart';
+import 'package:hiddify/core/logger/huijia_debug_log.dart';
 import 'package:hiddify/core/model/directories.dart';
 import 'package:hiddify/core/notification/in_app_notification_controller.dart';
 import 'package:hiddify/core/preferences/general_preferences.dart';
@@ -67,12 +68,31 @@ class HiddifyCoreService with InfraLogger {
   TaskEither<String, Unit> validateConfigByPath(String path, String tempPath, bool debug) {
     return TaskEither(() async {
       try {
+        await HuijiaDebugLog.info('core parse start', {'configPath': path, 'tempPath': tempPath});
         final response = await core.fgClient.parse(ParseRequest(tempPath: tempPath, configPath: path, debug: false));
-        if (response.responseCode != ResponseCode.OK) return left("${response.responseCode} ${response.message}");
-      } catch (e) {
+        await HuijiaDebugLog.info('core parse response', {
+          'responseCode': response.responseCode.name,
+          'message': response.message,
+          'contentLength': response.content.length,
+        });
+        if (response.responseCode != ResponseCode.OK) {
+          return left("${response.responseCode} ${response.message}");
+        }
+      } catch (e, stackTrace) {
+        await HuijiaDebugLog.error('core parse threw, retrying after setup', e, stackTrace, {
+          'configPath': path,
+          'tempPath': tempPath,
+        });
         await setup().run();
         final response = await core.fgClient.parse(ParseRequest(tempPath: tempPath, configPath: path, debug: false));
-        if (response.responseCode != ResponseCode.OK) return left("${response.responseCode} ${response.message}");
+        await HuijiaDebugLog.info('core parse retry response', {
+          'responseCode': response.responseCode.name,
+          'message': response.message,
+          'contentLength': response.content.length,
+        });
+        if (response.responseCode != ResponseCode.OK) {
+          return left("${response.responseCode} ${response.message}");
+        }
       }
       return right(unit);
     });

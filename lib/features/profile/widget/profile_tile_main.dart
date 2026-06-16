@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:gap/gap.dart';
 import 'package:hiddify/core/localization/translations.dart';
+import 'package:hiddify/core/model/constants.dart';
 import 'package:hiddify/core/router/dialog/dialog_notifier.dart';
 import 'package:hiddify/features/profile/model/profile_entity.dart';
 import 'package:hiddify/features/profile/notifier/profile_notifier.dart';
@@ -55,6 +56,7 @@ class ProfileTileMain extends HookConsumerWidget {
       RemoteProfileEntity(:final subInfo) => subInfo,
       _ => null,
     };
+    final displayName = Constants.normalizeAppDisplayName(profile.name);
 
     if (!isMain) return const Card();
 
@@ -83,7 +85,7 @@ class ProfileTileMain extends HookConsumerWidget {
                   ),
                   const Gap(6),
                   Text(
-                    profile.name,
+                    displayName,
                     style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -206,7 +208,7 @@ class ProfileTileMain extends HookConsumerWidget {
       return uri.pathSegments.lastWhere((e) => e.isNotEmpty, orElse: () => '');
     }
     if (host.endsWith('hiddify.com')) {
-      return "Hiddify";
+      return "回家看看";
     }
     return uri.host;
   }

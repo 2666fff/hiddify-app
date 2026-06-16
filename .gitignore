@@ -46,6 +46,7 @@ migrate_working_dir/
 **/*.xcframework
 /dist/
 /dist_docker/
+/out/
 
 /assets/core/*
 !/assets/core/.gitkeep
