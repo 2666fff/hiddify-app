@@ -49,22 +49,6 @@ class AccountController extends ChangeNotifier {
     await _authenticate(() => _api.login(username: username, password: password));
   }
 
-  Future<void> register(
-    String username,
-    String password, {
-    required String captchaToken,
-    required String captchaAnswer,
-  }) async {
-    await _authenticate(
-      () => _api.register(
-        username: username,
-        password: password,
-        captchaToken: captchaToken,
-        captchaAnswer: captchaAnswer,
-      ),
-    );
-  }
-
   Future<void> logout() async {
     try {
       await _ref.read(connectionNotifierProvider.notifier).disconnect();
