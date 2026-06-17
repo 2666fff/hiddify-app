@@ -310,6 +310,7 @@ class _ConnectedHomeRoutesPreview extends HookConsumerWidget {
         if (group == null || items.isEmpty) {
           return _ProfileRoutesPreview(profileId: profileId);
         }
+        final selectedTag = _selectedProxyTag(group, items);
         return _HomeRoutesCard(
           count: items.length,
           onTestDelay: () async => await ref.read(proxiesOverviewNotifierProvider.notifier).urlTest(group.tag),
@@ -317,7 +318,7 @@ class _ConnectedHomeRoutesPreview extends HookConsumerWidget {
             for (final proxy in items)
               _HomeProxyRouteRow(
                 proxy: proxy,
-                selected: group.selected == proxy.tag || proxy.isSelected,
+                selected: selectedTag == proxy.tag,
                 onTap: () async {
                   await ref.read(proxiesOverviewNotifierProvider.notifier).changeProxy(group.tag, proxy.tag);
                 },
@@ -329,6 +330,18 @@ class _ConnectedHomeRoutesPreview extends HookConsumerWidget {
       loading: () => const _HomeRoutesCard.loading(),
     );
   }
+}
+
+String? _selectedProxyTag(OutboundGroup group, List<OutboundInfo> items) {
+  final selected = group.selected.trim();
+  if (selected.isNotEmpty && items.any((item) => item.tag == selected)) {
+    return selected;
+  }
+
+  for (final item in items) {
+    if (item.isSelected) return item.tag;
+  }
+  return null;
 }
 
 class _ProfileRoutesPreview extends HookConsumerWidget {

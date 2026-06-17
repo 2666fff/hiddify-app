@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
@@ -14,6 +15,7 @@ import 'package:hiddify/features/profile/notifier/active_profile_notifier.dart';
 import 'package:hiddify/features/proxy/active/active_proxy_notifier.dart';
 import 'package:hiddify/features/settings/notifier/config_option/config_option_notifier.dart';
 import 'package:hiddify/gen/assets.gen.dart';
+import 'package:hiddify/utils/utils.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 // TODO: rewrite
@@ -32,6 +34,7 @@ class ConnectionButton extends HookConsumerWidget {
 
     final requiresReconnect = ref.watch(configOptionNotifierProvider).valueOrNull;
     final today = DateTime.now();
+    final cctvLivePromptMessage = PlatformUtils.isAndroid ? '现在可以打开央视频或者咪咕 看世界杯直播啦' : null;
     // final animationController = useAnimationController(
     //   duration: const Duration(seconds: 1),
     // )..repeat(reverse: true); // Ensure the animation loops indefinitely
@@ -116,6 +119,13 @@ class ConnectionButton extends HookConsumerWidget {
     if (delay <= 0 || delay > 65000 || connectionStatus.value != const Connected()) {
       secureLabel = "";
     }
+    final showCctvLivePrompt =
+        (PlatformUtils.isWindows || PlatformUtils.isAndroid) &&
+        switch (connectionStatus) {
+          AsyncData(value: Connected()) when requiresReconnect != true && delay > 0 && delay < 65000 => true,
+          _ => false,
+        };
+
     return _ConnectionButton(
       onTap: switch (connectionStatus) {
         AsyncData(value: Connected()) when requiresReconnect == true => () async {
@@ -184,6 +194,8 @@ class ConnectionButton extends HookConsumerWidget {
       },
       useImage: today.day >= 19 && today.day <= 23 && today.month == 3,
       secureLabel: secureLabel,
+      cctvLivePromptMessage: cctvLivePromptMessage,
+      showCctvLivePrompt: showCctvLivePrompt,
     );
   }
 }
@@ -199,6 +211,8 @@ class _ConnectionButton extends StatelessWidget {
     required this.newButtonColor,
     required this.animated,
     required this.secureLabel,
+    required this.cctvLivePromptMessage,
+    required this.showCctvLivePrompt,
   });
 
   final VoidCallback onTap;
@@ -208,6 +222,8 @@ class _ConnectionButton extends StatelessWidget {
   final AssetGenImage image;
   final bool useImage;
   final String secureLabel;
+  final String? cctvLivePromptMessage;
+  final bool showCctvLivePrompt;
 
   final Color newButtonColor;
 
@@ -281,7 +297,70 @@ class _ConnectionButton extends StatelessWidget {
             ],
           ),
         ),
+        if (showCctvLivePrompt) ...[const Gap(4), _CctvLivePrompt(message: cctvLivePromptMessage)],
       ],
+    );
+  }
+}
+
+class _CctvLivePrompt extends StatefulWidget {
+  const _CctvLivePrompt({this.message});
+
+  static final Uri liveUrl = Uri.parse('https://tv.cctv.com/live/cctv5/');
+
+  final String? message;
+
+  @override
+  State<_CctvLivePrompt> createState() => _CctvLivePromptState();
+}
+
+class _CctvLivePromptState extends State<_CctvLivePrompt> {
+  late final TapGestureRecognizer _linkRecognizer;
+
+  @override
+  void initState() {
+    super.initState();
+    _linkRecognizer = TapGestureRecognizer()
+      ..onTap = () {
+        UriUtils.tryLaunch(_CctvLivePrompt.liveUrl);
+      };
+  }
+
+  @override
+  void dispose() {
+    _linkRecognizer.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final baseStyle = theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant);
+
+    if (widget.message case final message?) {
+      return Text(message, style: baseStyle, textAlign: TextAlign.center);
+    }
+
+    return Text.rich(
+      TextSpan(
+        style: baseStyle,
+        children: [
+          const TextSpan(text: '打开'),
+          TextSpan(
+            text: '央视网',
+            style: baseStyle?.copyWith(
+              color: theme.colorScheme.primary,
+              decoration: TextDecoration.underline,
+              decorationColor: theme.colorScheme.primary,
+              fontWeight: FontWeight.w700,
+            ),
+            mouseCursor: SystemMouseCursors.click,
+            recognizer: _linkRecognizer,
+          ),
+          const TextSpan(text: '看直播吧'),
+        ],
+      ),
+      textAlign: TextAlign.center,
     );
   }
 }

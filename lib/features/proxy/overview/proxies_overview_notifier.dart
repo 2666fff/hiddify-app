@@ -211,7 +211,9 @@ class ProxiesOverviewNotifier extends _$ProxiesOverviewNotifier with AppLogger {
     }).run();
     final newselected = outbounds.items.where((e) => e.tag == outboundTag).firstOrNull;
     if (newselected != null) {
-      newselected.isSelected = true;
+      for (final item in outbounds.items) {
+        item.isSelected = item.tag == outboundTag;
+      }
       outbounds.selected = newselected.tag;
       state = AsyncValue.data(outbounds);
     }

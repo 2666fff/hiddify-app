@@ -5,9 +5,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:gap/gap.dart';
 import 'package:go_router/go_router.dart';
+import 'package:hiddify/core/model/constants.dart';
 import 'package:hiddify/features/account/data/account_api.dart';
 import 'package:hiddify/features/account/model/managed_client_config.dart';
 import 'package:hiddify/features/account/notifier/account_controller.dart';
+import 'package:hiddify/utils/uri_utils.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 class AuthPage extends HookConsumerWidget {
@@ -85,6 +87,7 @@ class AuthPage extends HookConsumerWidget {
 
     final theme = Theme.of(context);
     final captchaBytes = _captchaBytes(captcha.value?.imageDataUrl);
+    final username = usernameController.text.trim();
     return Scaffold(
       body: Center(
         child: ConstrainedBox(
@@ -186,6 +189,21 @@ class AuthPage extends HookConsumerWidget {
                     if (controller.errorMessage case final message?) ...[
                       const Gap(12),
                       Text(message, style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.error)),
+                      if (_isRechargeMessage(message)) ...[
+                        const Gap(8),
+                        OutlinedButton.icon(
+                          onPressed: controller.isLoading
+                              ? null
+                              : () => UriUtils.tryLaunch(Uri.parse('${Constants.portalUrl}/#recharge')),
+                          icon: const Icon(Icons.payments_outlined),
+                          label: const Text('查看充值介绍'),
+                        ),
+                        const Gap(6),
+                        Text(
+                          username.isEmpty ? '充值时请在备注里填写用户名，到账后会按金额开通对应天数。' : '充值时请在备注里填写用户名：$username，到账后会按金额开通对应天数。',
+                          style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                        ),
+                      ],
                     ],
                     const Gap(20),
                     FilledButton.icon(
@@ -231,4 +249,8 @@ Uint8List? _captchaBytes(String? dataUrl) {
   } catch (_) {
     return null;
   }
+}
+
+bool _isRechargeMessage(String message) {
+  return message.contains('会员已过期') || message.contains('请充值');
 }
