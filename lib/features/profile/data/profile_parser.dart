@@ -16,6 +16,10 @@ import 'package:hiddify/utils/utils.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:meta/meta.dart';
 
+const _huijiaSubscriptionPrefix = 'hj1.';
+const _huijiaSubscriptionVersion = 'hj1';
+const _huijiaSubscriptionKey = 'huijia-subscription-v1';
+
 /// parse profile subscription url and headers for data
 ///
 /// ***name parser hierarchy:***
@@ -171,12 +175,18 @@ class ProfileParser {
           }
           throw err;
         });
-    final content = await File(tempFilePath).readAsString();
+    final rawContent = await File(tempFilePath).readAsString();
+    final content = _decodeHuijiaSubscriptionEnvelope(rawContent);
+    final isHuijiaObfuscated = content != rawContent;
+    if (isHuijiaObfuscated) {
+      await File(tempFilePath).writeAsString(content);
+    }
     final decoded = safeDecodeBase64(content);
     final decodedLines = decoded.split('\n').where((line) => line.trim().isNotEmpty).toList(growable: false);
     await HuijiaDebugLog.info('profile download success', {
       'statusCode': rs.statusCode,
       'contentLength': content.length,
+      'huijiaObfuscated': isHuijiaObfuscated,
       'decodedLineCount': decodedLines.length,
       'firstLineShape': decodedLines.isEmpty ? '<empty>' : _shapeConfigLine(decodedLines.first),
       'headers': rs.headers.map.keys.join(','),
@@ -237,7 +247,8 @@ class ProfileParser {
                 : null,
           );
 
-          results[currentIndex] = safeDecodeBase64(await File(tmpPath).readAsString()).trim();
+          final nestedContent = _decodeHuijiaSubscriptionEnvelope(await File(tmpPath).readAsString());
+          results[currentIndex] = safeDecodeBase64(nestedContent).trim();
         } catch (err) {
           if (err is DioException && CancelToken.isCancel(err)) {
             return;
@@ -568,6 +579,34 @@ class ProfileParser {
 
 List<String> _profileContentLines(String content) {
   return safeDecodeBase64(content).split(RegExp(r'\r?\n')).where((line) => line.trim().isNotEmpty).toList();
+}
+
+String _decodeHuijiaSubscriptionEnvelope(String content) {
+  final trimmed = content.trim();
+  if (!trimmed.startsWith(_huijiaSubscriptionPrefix)) return content;
+
+  try {
+    final parts = trimmed.split('.');
+    if (parts.length != 3 || parts[0] != _huijiaSubscriptionVersion) {
+      throw const FormatException('invalid envelope');
+    }
+
+    final salt = base64Url.decode(base64Url.normalize(parts[1]));
+    final payload = base64Url.decode(base64Url.normalize(parts[2]));
+    if (salt.isEmpty || payload.isEmpty) {
+      throw const FormatException('empty envelope');
+    }
+
+    final key = utf8.encode(_huijiaSubscriptionKey);
+    final decoded = List<int>.generate(payload.length, (index) {
+      final saltByte = salt[index % salt.length];
+      final keyByte = key[(index + saltByte) % key.length];
+      return payload[index] ^ keyByte ^ saltByte;
+    });
+    return utf8.decode(decoded);
+  } catch (_) {
+    throw const ProfileFailure.invalidConfig('订阅数据格式不正确，请更新客户端或联系管理员');
+  }
 }
 
 bool _isProfileHeaderLine(String line) {
