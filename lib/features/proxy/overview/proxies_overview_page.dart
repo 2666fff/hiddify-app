@@ -2,6 +2,7 @@ import 'dart:math';
 
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:gap/gap.dart';
 import 'package:hiddify/core/localization/translations.dart';
 import 'package:hiddify/core/model/failures.dart';
@@ -19,6 +20,21 @@ class ProxiesOverviewPage extends HookConsumerWidget with PresLogger {
 
     final proxies = ref.watch(proxiesOverviewNotifierProvider);
     final sortBy = ref.watch(proxiesSortNotifierProvider);
+    final groupTag = proxies.valueOrNull?.tag;
+
+    useEffect(() {
+      if (groupTag == null) return null;
+
+      Future.microtask(() async {
+        try {
+          await ref.read(proxiesOverviewNotifierProvider.notifier).urlTest(groupTag, hapticFeedback: false);
+        } catch (error, stackTrace) {
+          loggy.warning("automatic proxy delay test failed", error, stackTrace);
+        }
+      });
+
+      return null;
+    }, [groupTag]);
 
     // final selectActiveProxyMutation = useMutation(
     //   initialOnFailure: (error) => CustomToast.error(t.presentShortError(error)).show(context),

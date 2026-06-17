@@ -31,20 +31,6 @@ class ProxyTile extends HookConsumerWidget with PresLogger {
         size: 40,
         padding: const EdgeInsetsDirectional.only(end: 8),
       ),
-      subtitle: Text.rich(
-        TextSpan(
-          text: proxy.type,
-          children: [
-            if (proxy.isGroup)
-              TextSpan(
-                text: ' (${proxy.groupSelectedTagDisplay.trim()})',
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
-          ],
-        ),
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-      ),
       trailing: Column(
         children: [
           if (proxy.urlTestDelay != 0)

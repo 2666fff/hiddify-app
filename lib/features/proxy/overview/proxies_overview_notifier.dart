@@ -114,7 +114,7 @@ class ProxiesOverviewNotifier extends _$ProxiesOverviewNotifier with AppLogger {
 
   //           final ai = a.urlTestDelay;
   //           final bi = b.urlTestDelay;
-  //           if (ai == 0 && bi == 0) return -1;
+  //           if (ai == 0 && bi == 0) return 0;
   //           if (ai == 0 && bi > 0) return 1;
   //           if (ai > 0 && bi == 0) return -1;
   //           return ai.compareTo(bi);
@@ -151,7 +151,7 @@ class ProxiesOverviewNotifier extends _$ProxiesOverviewNotifier with AppLogger {
 
         final ai = a.urlTestDelay;
         final bi = b.urlTestDelay;
-        if (ai == 0 && bi == 0) return -1;
+        if (ai == 0 && bi == 0) return 0;
         if (ai == 0 && bi > 0) return 1;
         if (ai > 0 && bi == 0) return -1;
         return ai.compareTo(bi);
@@ -217,14 +217,19 @@ class ProxiesOverviewNotifier extends _$ProxiesOverviewNotifier with AppLogger {
     }
   }
 
-  Future<void> urlTest(String groupTag) async {
+  Future<void> urlTest(String groupTag, {bool hapticFeedback = true}) async {
     loggy.debug("testing group: [$groupTag]");
     if (state case AsyncData()) {
-      await ref.read(hapticServiceProvider.notifier).lightImpact();
+      if (hapticFeedback) {
+        await ref.read(hapticServiceProvider.notifier).lightImpact();
+      }
       await ref.read(proxyRepositoryProvider).urlTest(groupTag).getOrElse((err) {
         loggy.error("error testing group", err);
         throw err;
       }).run();
+      if (ref.read(proxiesSortNotifierProvider) != ProxiesSort.delay) {
+        await ref.read(proxiesSortNotifierProvider.notifier).update(ProxiesSort.delay);
+      }
     }
   }
 }

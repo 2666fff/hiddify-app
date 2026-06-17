@@ -273,34 +273,61 @@ class HomeRoutesPreview extends HookConsumerWidget {
     );
 
     if (connectionState.isConnected) {
-      final proxies = ref.watch(proxiesOverviewNotifierProvider);
-      return proxies.when(
-        data: (group) {
-          final items = (group?.items ?? []).where(_isVisibleProxyInfo).toList();
-          if (group == null || items.isEmpty) {
-            return _ProfileRoutesPreview(profileId: profileId);
-          }
-          return _HomeRoutesCard(
-            count: items.length,
-            onTestDelay: () async => await ref.read(proxiesOverviewNotifierProvider.notifier).urlTest(group.tag),
-            children: [
-              for (final proxy in items)
-                _HomeProxyRouteRow(
-                  proxy: proxy,
-                  selected: group.selected == proxy.tag || proxy.isSelected,
-                  onTap: () async {
-                    await ref.read(proxiesOverviewNotifierProvider.notifier).changeProxy(group.tag, proxy.tag);
-                  },
-                ),
-            ],
-          );
-        },
-        error: (_, _) => _ProfileRoutesPreview(profileId: profileId),
-        loading: () => const _HomeRoutesCard.loading(),
-      );
+      return _ConnectedHomeRoutesPreview(profileId: profileId);
     }
 
     return _ProfileRoutesPreview(profileId: profileId);
+  }
+}
+
+class _ConnectedHomeRoutesPreview extends HookConsumerWidget {
+  const _ConnectedHomeRoutesPreview({required this.profileId});
+
+  final String profileId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final proxies = ref.watch(proxiesOverviewNotifierProvider);
+    final groupTag = proxies.valueOrNull?.tag;
+
+    useEffect(() {
+      if (groupTag == null) return null;
+
+      Future.microtask(() async {
+        try {
+          await ref.read(proxiesOverviewNotifierProvider.notifier).urlTest(groupTag, hapticFeedback: false);
+        } catch (_) {
+          // Automatic tests should not interrupt opening the home page.
+        }
+      });
+
+      return null;
+    }, [groupTag]);
+
+    return proxies.when(
+      data: (group) {
+        final items = (group?.items ?? []).where(_isVisibleProxyInfo).toList();
+        if (group == null || items.isEmpty) {
+          return _ProfileRoutesPreview(profileId: profileId);
+        }
+        return _HomeRoutesCard(
+          count: items.length,
+          onTestDelay: () async => await ref.read(proxiesOverviewNotifierProvider.notifier).urlTest(group.tag),
+          children: [
+            for (final proxy in items)
+              _HomeProxyRouteRow(
+                proxy: proxy,
+                selected: group.selected == proxy.tag || proxy.isSelected,
+                onTap: () async {
+                  await ref.read(proxiesOverviewNotifierProvider.notifier).changeProxy(group.tag, proxy.tag);
+                },
+              ),
+          ],
+        );
+      },
+      error: (_, _) => _ProfileRoutesPreview(profileId: profileId),
+      loading: () => const _HomeRoutesCard.loading(),
+    );
   }
 }
 
@@ -314,6 +341,22 @@ class _ProfileRoutesPreview extends HookConsumerWidget {
     final routes = ref.watch(homeProfileRoutesProvider(profileId));
     final selectedRoute = ref.watch(homeSelectedRouteProvider(profileId));
     final delays = ref.watch(homeRouteDelayProvider(profileId));
+    final routeList = routes.valueOrNull;
+    final routeSignature = routeList == null ? null : Object.hashAll(routeList.map((route) => route.tag));
+
+    useEffect(() {
+      if (routeList == null || routeList.isEmpty) return null;
+
+      Future.microtask(() async {
+        try {
+          await ref.read(homeRouteDelayProvider(profileId).notifier).test(routeList);
+        } catch (_) {
+          // Automatic tests should not interrupt opening the home page.
+        }
+      });
+
+      return null;
+    }, [profileId, routeSignature]);
 
     return routes.when(
       data: (routes) {
@@ -463,7 +506,7 @@ class _HomeConfigRouteRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return _HomeRouteRow(name: route.name, type: route.type, delay: delay, selected: selected, onTap: onTap);
+    return _HomeRouteRow(name: route.name, delay: delay, selected: selected, onTap: onTap);
   }
 }
 
@@ -478,15 +521,14 @@ class _HomeProxyRouteRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final name = proxy.tagDisplay.trim().isNotEmpty ? proxy.tagDisplay.trim() : _cleanRouteName(proxy.tag);
 
-    return _HomeRouteRow(name: name, type: proxy.type, delay: proxy.urlTestDelay, selected: selected, onTap: onTap);
+    return _HomeRouteRow(name: name, delay: proxy.urlTestDelay, selected: selected, onTap: onTap);
   }
 }
 
 class _HomeRouteRow extends StatelessWidget {
-  const _HomeRouteRow({required this.name, required this.type, this.delay, this.selected = false, this.onTap});
+  const _HomeRouteRow({required this.name, this.delay, this.selected = false, this.onTap});
 
   final String name;
-  final String type;
   final int? delay;
   final bool selected;
   final GestureTapCallback? onTap;
@@ -505,14 +547,6 @@ class _HomeRouteRow extends StatelessWidget {
         color: selected ? theme.colorScheme.primary : theme.colorScheme.onSurfaceVariant,
       ),
       title: Text(name, maxLines: 1, overflow: TextOverflow.ellipsis),
-      subtitle: type.trim().isEmpty
-          ? null
-          : Text(
-              type.toUpperCase(),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-            ),
       trailing: delay == null ? null : _HomeRouteDelay(delay!),
       selected: selected,
       selectedTileColor: theme.colorScheme.primaryContainer,
