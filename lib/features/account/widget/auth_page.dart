@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:gap/gap.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hiddify/core/model/constants.dart';
@@ -48,12 +49,12 @@ class AuthPage extends HookConsumerWidget {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Icon(Icons.shield_outlined, size: 48, color: theme.colorScheme.primary),
+                    Align(child: SvgPicture.asset('assets/images/logo.svg', width: 56, height: 56)),
                     const Gap(16),
-                    Text('登录 回家看看', textAlign: TextAlign.center, style: theme.textTheme.headlineSmall),
+                    Text('回家看看', textAlign: TextAlign.center, style: theme.textTheme.headlineSmall),
                     const Gap(6),
                     Text(
-                      '服务端校验账号后会自动下发可用线路',
+                      '注册即享10分钟免费试用, 一键解锁贺炜世界杯',
                       textAlign: TextAlign.center,
                       style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant),
                     ),
@@ -104,14 +105,14 @@ class AuthPage extends HookConsumerWidget {
                       icon: controller.isLoading
                           ? const SizedBox.square(dimension: 18, child: CircularProgressIndicator(strokeWidth: 2))
                           : const Icon(Icons.login_rounded),
-                      label: const Text('登录并同步线路'),
+                      label: const Text('登录'),
                     ),
                     const Gap(8),
                     TextButton(
                       onPressed: controller.isLoading
                           ? null
                           : () => UriUtils.tryLaunch(Uri.parse('${Constants.portalUrl}/#account')),
-                      child: const Text('没有账号，网页注册'),
+                      child: const Text('网页注册'),
                     ),
                     const Gap(16),
                     Text(
